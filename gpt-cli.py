@@ -15,6 +15,7 @@
 import argparse
 import os
 import sys
+import json
 from openai import AzureOpenAI
 
 def files_reader(files):
@@ -24,9 +25,23 @@ def files_reader(files):
         if os.path.exists( path ):
           with open(path, 'r', encoding='UTF-8') as f:
             result += f.read()
-            f.close()
 
     return result
+
+
+def read_prompt_json(path):
+    system_prompt = ""
+    user_prompt = ""
+
+    if os.path.isfile(path):
+        with open(path, 'r', encoding='UTF-8') as f:
+          result = json.load(f)
+          if "system_prompt" in result:
+            system_prompt = result["system_prompt"]
+          if "user_prompt" in result:
+            user_prompt = result["user_prompt"]
+
+    return system_prompt, user_prompt
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description='Code review specified file with OpenAI LLM')
@@ -36,6 +51,7 @@ if __name__=="__main__":
     parser.add_argument('-d', '--deployment', action='store', default=os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME"), help='specify deployment name or set it in AZURE_OPENAI_DEPLOYMENT_NAME env')
     parser.add_argument('-s', '--systemprompt', action='store', default=None, help='specify system prompt if necessary')
     parser.add_argument('-u', '--prompt', action='store', default=None, help='specify prompt')
+    parser.add_argument('-p', '--promptfile', action='store', default=None, help='specify prompt.json')
     args = parser.parse_args()
 
     additional_prompt = ""
@@ -44,6 +60,16 @@ if __name__=="__main__":
     else:
         additional_prompt = sys.stdin.read()
 
+    system_prompt, user_prompt = read_prompt_json(args.promptfile)
+
+    if args.systemprompt is not None:
+        system_prompt = args.systemprompt
+
+    if args.prompt is not None:
+        user_prompt = str(args.prompt)
+
+    user_prompt = user_prompt + "\n" +additional_prompt
+
     client = AzureOpenAI(
       api_key = args.apikey,  
       api_version = "2024-02-01",
@@ -51,10 +77,10 @@ if __name__=="__main__":
     )
 
     _messages = []
-    if args.systemprompt is not None:
-        _messages.append( {"role": "system", "content": args.systemprompt} )
-    if args.prompt is not None:
-        _messages.append( {"role": "user", "content": str(args.prompt)+"\n"+additional_prompt} )
+    if system_prompt:
+        _messages.append( {"role": "system", "content": system_prompt} )
+    if user_prompt:
+        _messages.append( {"role": "user", "content": user_prompt} )
 
     response = client.chat.completions.create(
         model= args.deployment, #"gpt-35-turbo-instruct", # model = "deployment_name".
