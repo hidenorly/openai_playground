@@ -41,9 +41,11 @@ class OpenAICompatibleLLM:
 
         if response.status_code == 200:
             response_json = response.json()
-            return response_json['choices'][0]['message']['content']
+            main_message = response_json['choices'][0]['message']['content']
+            return main_message, response_json
         else:
             raise Exception(f"Error: {response.status_code} - {response.text}")
+        return None, None
 
 def files_reader(files):
     result = ""
@@ -74,6 +76,7 @@ if __name__ == "__main__":
     parser.add_argument('-s', '--systemprompt', action='store', default=None, help='specify system prompt if necessary')
     parser.add_argument('-u', '--prompt', action='store', default=None, help='specify prompt')
     parser.add_argument('-p', '--promptfile', action='store', default=None, help='specify prompt.json')
+    parser.add_argument('-v', '--verbose', action='store_true', default=False, help='enable verbose')
     args = parser.parse_args()
 
     additional_prompt = ""
@@ -101,7 +104,21 @@ if __name__ == "__main__":
         messages.append({"role": "user", "content": user_prompt})
 
     try:
-        response_content = service.create_chat_completion(messages=messages, model=args.deployment)
+        response_content, response = service.create_chat_completion(messages=messages, model=args.deployment)
         print(response_content)
+        if response and args.verbose:
+            print("")
+            if "id" in response:
+                print(f'id: {response["id"]}')
+            if "model" in response:
+                print(f'model: {response["model"]}')
+            if "usage" in response:
+                usage = response["usage"]
+                if "prompt_tokens" in usage:
+                    print(f'prompt_tokens: {usage["prompt_tokens"]}')
+                if "completion_tokens" in usage:
+                    print(f'completion_tokens: {usage["completion_tokens"]}')
+                if "total_tokens" in usage:
+                    print(f'total_tokens: {usage["total_tokens"]}')
     except Exception as e:
         print(e)
