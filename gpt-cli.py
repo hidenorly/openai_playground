@@ -16,6 +16,7 @@ import argparse
 import os
 import sys
 import json
+import select
 from openai import AzureOpenAI
 
 def files_reader(files):
@@ -33,7 +34,7 @@ def read_prompt_json(path):
     system_prompt = ""
     user_prompt = ""
 
-    if os.path.isfile(path):
+    if path and os.path.isfile(path):
         with open(path, 'r', encoding='UTF-8') as f:
           result = json.load(f)
           if "system_prompt" in result:
@@ -55,10 +56,11 @@ if __name__=="__main__":
     args = parser.parse_args()
 
     additional_prompt = ""
-    if len(args.args)>0:
+    if len(args.args) > 0:
         additional_prompt = files_reader(args.args)
     else:
-        additional_prompt = sys.stdin.read()
+        if select.select([sys.stdin], [], [], 0.0)[0]:
+            additional_prompt = sys.stdin.read()
 
     system_prompt, user_prompt = read_prompt_json(args.promptfile)
 
