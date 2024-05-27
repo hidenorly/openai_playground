@@ -17,6 +17,7 @@ import os
 import sys
 import json
 import requests
+import select
 
 class OpenAICompatibleLLM:
     def __init__(self, api_key, endpoint):
@@ -83,7 +84,8 @@ if __name__ == "__main__":
     if len(args.args) > 0:
         additional_prompt = files_reader(args.args)
     else:
-        additional_prompt = sys.stdin.read()
+        if select.select([sys.stdin], [], [], 0.0)[0]:
+            additional_prompt = sys.stdin.read()
 
     system_prompt, user_prompt = read_prompt_json(args.promptfile)
 
