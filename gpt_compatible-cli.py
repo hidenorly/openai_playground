@@ -24,7 +24,7 @@ class OpenAICompatibleLLM:
         self.api_key = api_key
         self.endpoint = endpoint
 
-    def create_chat_completion(self, messages, model=None):
+    def _create_header_and_payload(self, messages, model=None):
         headers = {
             'accept': 'application/json',
             'Content-Type': 'application/json',
@@ -37,6 +37,10 @@ class OpenAICompatibleLLM:
         }
         if model:
             payload["model"] = model
+        return headers, payload
+
+    def create_chat_completion(self, messages, model=None):
+        headers, payload  = self._create_header_and_payload(messages, model)
 
         response = requests.post(self.endpoint, headers=headers, json=payload)
 
