@@ -53,6 +53,7 @@ if __name__=="__main__":
     parser.add_argument('-s', '--systemprompt', action='store', default=None, help='specify system prompt if necessary')
     parser.add_argument('-u', '--prompt', action='store', default=None, help='specify prompt')
     parser.add_argument('-p', '--promptfile', action='store', default=None, help='specify prompt.json')
+    parser.add_argument('-v', '--verbose', action='store_true', default=False, help='enable verbose')
     args = parser.parse_args()
 
     additional_prompt = ""
@@ -89,6 +90,20 @@ if __name__=="__main__":
         messages = _messages
     )
 
-    #print(response)
-    #print(response.model_dump_json(indent=2))
     print(response.choices[0].message.content)
+
+    if response and args.verbose:
+        print("")
+        response = dict(response)
+        if "id" in response:
+            print(f'id: {response["id"]}')
+        if "model" in response:
+            print(f'model: {response["model"]}')
+        if "usage" in response:
+            usage = dict(response["usage"])
+            if "prompt_tokens" in usage:
+                print(f'prompt_tokens: {usage["prompt_tokens"]}')
+            if "completion_tokens" in usage:
+                print(f'completion_tokens: {usage["completion_tokens"]}')
+            if "total_tokens" in usage:
+                print(f'total_tokens: {usage["total_tokens"]}')
