@@ -29,11 +29,13 @@ def code_section_extractor(lines):
     start_pos = None
     for i in range(0, len(lines)):
         line = lines[i].strip()
-        if start_pos==None and line.startswith("```"):
+        if start_pos==None and (line.startswith("```") or line.startswith("++ b/")):
             start_pos = i
         elif start_pos!=None and line.startswith("```"):
             results.append( lines[start_pos+1:i] )
             start_pos = None
+    if not results:
+        results = [lines]
     return results
 
 if __name__=="__main__":
