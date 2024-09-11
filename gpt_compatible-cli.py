@@ -20,9 +20,10 @@ import requests
 import select
 
 class OpenAICompatibleLLM:
-    def __init__(self, api_key, endpoint):
+    def __init__(self, api_key, endpoint, is_streaming):
         self.api_key = api_key
         self.endpoint = endpoint
+        self.is_streaming = is_streaming
 
     def _create_header_and_payload(self, messages, model=None):
         headers = {
@@ -42,14 +43,37 @@ class OpenAICompatibleLLM:
     def create_chat_completion(self, messages, model=None):
         headers, payload  = self._create_header_and_payload(messages, model)
 
-        response = requests.post(self.endpoint, headers=headers, json=payload)
+        if "/api/chat" in self.endpoint or self.is_streaming:
+            # streaming mode (ollama mode)
+            payload["stream"] = True
+            
+            r = requests.post(self.endpoint, headers=headers, json=payload, stream=True)
+            r.raise_for_status()
+            output = ""
+            for line in r.iter_lines():
+                body = json.loads(line)
+                if "error" in body:
+                    raise Exception(body["error"])
+                if body.get("done") is False:
+                    message = body.get("message", "")
+                    content = message.get("content", "")
+                    output += content
 
-        if response.status_code == 200:
-            response_json = response.json()
-            main_message = response_json['choices'][0]['message']['content']
-            return main_message, response_json
+                if body.get("done", False):
+                    message = body
+                    message["content"] = output
+                    return output, message
+
         else:
-            raise Exception(f"Error: {response.status_code} - {response.text}")
+            # non-streaming mode
+            response = requests.post(self.endpoint, headers=headers, json=payload)
+            if response.status_code == 200:
+                response_json = response.json()
+                main_message = response_json['choices'][0]['message']['content']
+                return main_message, response_json
+            else:
+                raise Exception(f"Error: {response.status_code} - {response.text}")
+
         return None, None
 
 def files_reader(files):
@@ -81,6 +105,7 @@ if __name__ == "__main__":
     parser.add_argument('-s', '--systemprompt', action='store', default=None, help='specify system prompt if necessary')
     parser.add_argument('-u', '--prompt', action='store', default=None, help='specify prompt')
     parser.add_argument('-p', '--promptfile', action='store', default=None, help='specify prompt.json')
+    parser.add_argument('-o', '--stream', action='store_true', default=False, help='specify if streaming mode is necessary (e.g. ollam)')
     parser.add_argument('-v', '--verbose', action='store_true', default=False, help='enable verbose')
     args = parser.parse_args()
 
@@ -101,7 +126,7 @@ if __name__ == "__main__":
 
     user_prompt = user_prompt + "\n" + additional_prompt
 
-    service = OpenAICompatibleLLM(api_key=args.apikey, endpoint=args.endpoint)
+    service = OpenAICompatibleLLM(api_key=args.apikey, endpoint=args.endpoint, is_streaming=args.stream)
 
     messages = []
     if system_prompt:
