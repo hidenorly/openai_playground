@@ -62,6 +62,24 @@ class GptHelper:
 
         return system_prompt, user_prompt
 
+
+class Agent:
+    def __init__(self, gpt, role):
+        self.gpt = gpt
+        self.role = role
+        self.history = []
+
+
+    def query(self, _messages):
+        response = self.client.chat.completions.create(
+            model= self.model,
+            messages = _messages
+        )
+        return response
+    
+
+
+
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description='Code review specified file with OpenAI LLM')
     parser.add_argument('args', nargs='*', help='files')
