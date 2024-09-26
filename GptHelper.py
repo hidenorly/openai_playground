@@ -81,7 +81,6 @@ class OpenAIGptHelper(IGpt):
         return response.choices[0].message.content, response
 
 
-
 class OpenAICompatibleGptHelper(IGpt):
     def __init__(self, api_key, endpoint, model=None, is_streaming = False, headers={}):
         self.api_key = api_key
@@ -231,7 +230,14 @@ class GptClientFactory:
             endpoint = os.getenv("LLM_ENDPOINT") if not args.endpoint else args.endpoint
             deployment = os.getenv("LLM_DEPLOYMENT_NAME") if not args.deployment else args.deployment
             is_streaming = True if "/api/chat" in endpoint else False
-            gpt_client = OpenAICompatibleGptHelper(apikey, endpoint, deployment, is_streaming)
+            headers = {}
+            if "header" in args:
+                for header in args.header:
+                    pos = header.find(":")
+                    if pos!=None:
+                        headers[header[0:pos]] = header[pos+1:].strip()
+
+            gpt_client = OpenAICompatibleGptHelper(apikey, endpoint, deployment, is_streaming, headers)
         else:
             apikey = os.getenv("AZURE_OPENAI_API_KEY") if not args.apikey else args.apikey
             endpoint = os.getenv("AZURE_OPENAI_ENDPOINT") if not args.endpoint else args.endpoint

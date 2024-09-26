@@ -20,15 +20,10 @@ import select
 from GptHelper import GptClientFactory, IGpt
 
 class SimpleGptClient:
-    def __init__(self, client=None, promptfile=None, headers=[]):
+    def __init__(self, client=None, promptfile=None):
         self.client = client
         self.system_prompt = ""
         self.user_prompt = ""
-        self.headers = {}
-        for header in headers:
-            pos = header.find(":")
-            if pos!=None:
-                self.headers[header[0:pos]] = header[pos+1:]
         if promptfile:
             self.system_prompt, self.user_prompt = IGpt.read_prompt_json(promptfile)
 
@@ -81,14 +76,13 @@ if __name__=="__main__":
 
     parser.add_argument('-s', '--systemprompt', action='store', default=None, help='specify system prompt if necessary')
     parser.add_argument('-u', '--prompt', action='store', default=None, help='specify prompt')
-    parser.add_argument('--header', action='append', default=[], help='Specify headers for http e.g. header_key:value (multiple --header are ok)')
+    parser.add_argument('-H', '--header', action='append', default=[], help='Specify headers for http e.g. header_key:value (multiple --header are ok)')
     parser.add_argument('-v', '--verbose', action='store_true', default=False, help='enable verbose')
 
     args = parser.parse_args()
 
     client = GptClientFactory.new_client(args)
-    gpt_client = SimpleGptClient(client, args.promptfile, args.header)
-
+    gpt_client = SimpleGptClient(client, args.promptfile)
 
     additional_prompt = ""
     if len(args.args) > 0:
