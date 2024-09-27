@@ -71,7 +71,7 @@ if __name__=="__main__":
     parser.add_argument('-k', '--apikey', action='store', default=None, help='specify your API key or set it in AZURE_OPENAI_API_KEY env')
     parser.add_argument('-y', '--secretkey', action='store', default=os.getenv("AWS_SECRET_ACCESS_KEY"), help='specify your secret key or set it in AWS_SECRET_ACCESS_KEY env (for claude3)')
     parser.add_argument('-e', '--endpoint', action='store', default=None, help='specify your end point or set it in AZURE_OPENAI_ENDPOINT env')
-    parser.add_argument('-d', '--deployment', action='store', default=None, help='specify deployment name or set it in AZURE_OPENAI_DEPLOYMENT_NAME env')
+    parser.add_argument('-d', '--deployment', action='store', default=None, help='specify deployment name or set it in AZURE_OPENAI_DEPLOYMENT_NAME env or model(s with ,)')
     parser.add_argument('-p', '--promptfile', action='store', default=None, help='specify prompt.json')
 
     parser.add_argument('-s', '--systemprompt', action='store', default=None, help='specify system prompt if necessary')
@@ -86,7 +86,7 @@ if __name__=="__main__":
 
     additional_prompt = ""
     if len(args.args) > 0:
-        additional_prompt = files_reader(args.args)
+        additional_prompt = IGpt.files_reader(args.args)
     else:
         if select.select([sys.stdin], [], [], 0.0)[0]:
             additional_prompt = sys.stdin.read()
@@ -98,23 +98,28 @@ if __name__=="__main__":
         gpt_client.user_prompt = str(args.prompt)
 
 
-    content, response = gpt_client.query(additional_prompt)
-    print(content)
+    contents, responses = gpt_client.query(additional_prompt)
+    if not isinstance(contents, list):
+        contents = [contents]
+    for content in contents:
+        print(content)
 
-    if response and args.verbose:
-        print("")
-        response = dict(response)
-        if "id" in response:
-            print(f'id: {response["id"]}')
-        if "model" in response:
-            print(f'model: {response["model"]}')
-        if "usage" in response:
-            usage = dict(response["usage"])
-            if "prompt_tokens" in usage:
-                print(f'prompt_tokens: {usage["prompt_tokens"]}')
-            if "completion_tokens" in usage:
-                print(f'completion_tokens: {usage["completion_tokens"]}')
-            if "total_tokens" in usage:
-                print(f'total_tokens: {usage["total_tokens"]}')
+    if responses and args.verbose:
+        if not isinstance(responses, list):
+            responses = [responses]
+        for response in responses:
+            print("")
+            if "id" in response:
+                print(f'id: {response["id"]}')
+            if "model" in response:
+                print(f'model: {response["model"]}')
+            if "usage" in response:
+                usage = dict(response["usage"])
+                if "prompt_tokens" in usage:
+                    print(f'prompt_tokens: {usage["prompt_tokens"]}')
+                if "completion_tokens" in usage:
+                    print(f'completion_tokens: {usage["completion_tokens"]}')
+                if "total_tokens" in usage:
+                    print(f'total_tokens: {usage["total_tokens"]}')
 
 

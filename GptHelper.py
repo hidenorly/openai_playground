@@ -101,7 +101,11 @@ class OpenAICompatibleGptHelper(IGpt):
         if self.is_streaming:
             payload["stream"] = True
         if self.model:
-            payload["model"] = self.model
+            models = self.model.split(",")
+            if len(models)==1:
+                payload["model"] = self.model
+            else:
+                payload["models"] = models
 
         return payload
 
@@ -138,9 +142,15 @@ class OpenAICompatibleGptHelper(IGpt):
             # non-streaming mode
             response = requests.post(self.endpoint, headers=self.headers, json=payload)
             if response.status_code == 200:
-                response_json = response.json()
-                main_message = response_json['choices'][0]['message']['content']
-                return main_message, response_json
+                responses = response_json = response.json()
+                if isinstance(responses, dict):
+                    responses = [responses]
+                main_messages = []
+                for a_response in responses:
+                    main_messages.append( a_response['choices'][0]['message']['content'] )
+                if len(main_messages)==1:
+                    main_messages = main_messages[0]
+                return main_messages, response_json
             else:
                 raise Exception(f"Error: {response.status_code} - {response.text}")
 
