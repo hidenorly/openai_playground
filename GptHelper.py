@@ -81,19 +81,23 @@ class OpenAIGptHelper(IGpt):
         return response.choices[0].message.content, response
 
 
+
 class OpenAICompatibleGptHelper(IGpt):
-    def __init__(self, api_key, endpoint, model=None, is_streaming = False, headers={}):
+    def __init__(self, api_key, endpoint, model=None, is_streaming = False):
         self.api_key = api_key
         self.endpoint = endpoint
         self.model = model
         self.is_streaming = is_streaming
-        self.headers = headers
-        self.headers['accept'] = 'application/json'
-        self.headers['Content-Type'] = 'application/json'
-        if self.api_key:
-            self.headers['Authorization'] = f'Bearer {self.api_key}'
 
-    def _create_payload(self, messages):
+    def _create_header_and_payload(self, messages):
+        # headers
+        headers = {
+            'accept': 'application/json',
+            'Content-Type': 'application/json',
+        }
+        if self.api_key:
+            headers['Authorization'] = f'Bearer {self.api_key}'
+
         # payload
         payload = {
             "messages": messages,
@@ -101,13 +105,9 @@ class OpenAICompatibleGptHelper(IGpt):
         if self.is_streaming:
             payload["stream"] = True
         if self.model:
-            models = self.model.split(",")
-            if len(models)==1:
-                payload["model"] = self.model
-            else:
-                payload["models"] = models
+            payload["model"] = self.model
 
-        return payload
+        return headers, payload
 
     def query(self, system_prompt, user_prompt):
         _messages = []
@@ -116,12 +116,11 @@ class OpenAICompatibleGptHelper(IGpt):
         if user_prompt:
             _messages.append( {"role": "user", "content": user_prompt} )
 
-        payload  = self._create_payload(_messages)
-        #print(payload)
+        headers, payload  = self._create_header_and_payload(_messages)
 
         if self.is_streaming:
             # streaming mode (ollama mode)
-            r = requests.post(self.endpoint, headers=self.headers, json=payload, stream=True)
+            r = requests.post(self.endpoint, headers=headers, json=payload, stream=True)
             r.raise_for_status()
             output = ""
             for line in r.iter_lines():
@@ -140,17 +139,11 @@ class OpenAICompatibleGptHelper(IGpt):
 
         else:
             # non-streaming mode
-            response = requests.post(self.endpoint, headers=self.headers, json=payload)
+            response = requests.post(self.endpoint, headers=headers, json=payload)
             if response.status_code == 200:
-                responses = response_json = response.json()
-                if isinstance(responses, dict):
-                    responses = [responses]
-                main_messages = []
-                for a_response in responses:
-                    main_messages.append( a_response['choices'][0]['message']['content'] )
-                if len(main_messages)==1:
-                    main_messages = main_messages[0]
-                return main_messages, response_json
+                response_json = response.json()
+                main_message = response_json['choices'][0]['message']['content']
+                return main_message, response_json
             else:
                 raise Exception(f"Error: {response.status_code} - {response.text}")
 
@@ -184,16 +177,14 @@ class ClaudeGptHelper(IGpt):
                 ]
             }]
 
-            _body = {
+            body = json.dumps({
                 "anthropic_version": "bedrock-2023-05-31",
                 "max_tokens": max_tokens,
                 "temperature": 1,
                 "top_p": 0.999,
+                "system": system_prompt,
                 "messages": _message
-            }
-            if system_prompt:
-                _body["system"] = system_prompt
-            body = json.dumps(_body)
+            })
 
             try:
                 response = self.client.invoke_model_with_response_stream(
@@ -240,14 +231,7 @@ class GptClientFactory:
             endpoint = os.getenv("LLM_ENDPOINT") if not args.endpoint else args.endpoint
             deployment = os.getenv("LLM_DEPLOYMENT_NAME") if not args.deployment else args.deployment
             is_streaming = True if "/api/chat" in endpoint else False
-            headers = {}
-            if "header" in args:
-                for header in args.header:
-                    pos = header.find(":")
-                    if pos!=None:
-                        headers[header[0:pos]] = header[pos+1:].strip()
-
-            gpt_client = OpenAICompatibleGptHelper(apikey, endpoint, deployment, is_streaming, headers)
+            gpt_client = OpenAICompatibleGptHelper(apikey, endpoint, deployment, is_streaming)
         else:
             apikey = os.getenv("AZURE_OPENAI_API_KEY") if not args.apikey else args.apikey
             endpoint = os.getenv("AZURE_OPENAI_ENDPOINT") if not args.endpoint else args.endpoint
@@ -279,7 +263,7 @@ class GptQueryWithCheck:
         content = None
         response = None
 
-        if self.client and user_prompt:
+        if self.client and system_prompt and user_prompt:
             try:
                 content, response = self.client.query(system_prompt, user_prompt)
             except:
@@ -299,8 +283,7 @@ class GptQueryWithCheck:
         response = None
 
         system_prompt, user_prompt = self._generate_prompt(replace_keydata)
-        #print(system_prompt)
-        #print(user_prompt)
+        print(user_prompt)
 
         retry_count = 0
         while retry_count<3:
