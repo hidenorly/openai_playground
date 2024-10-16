@@ -63,7 +63,7 @@ class SimpleGptClient:
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description='multi gpt client')
-    parser.add_argument('args', nargs='*', help='files')
+    parser.add_argument('args', nargs='*', help='files file[:line]')
 
     parser.add_argument('-c', '--useclaude', action='store_true', default=False, help='specify if you want to use calude3')
     parser.add_argument('-g', '--gpt', action='store', default="openai", help='specify openai or calude3 or openaicompatible')
@@ -95,7 +95,7 @@ if __name__=="__main__":
     	gpt_client.system_prompt = str(args.systemprompt)
 
     if args.prompt is not None:
-        gpt_client.user_prompt = str(args.prompt)
+        gpt_client.user_prompt += str(args.prompt)
 
 
     contents, responses = gpt_client.query(additional_prompt)

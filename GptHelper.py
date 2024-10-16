@@ -28,13 +28,36 @@ class IGpt:
         return None, None
 
     @staticmethod
-    def files_reader(files):
+    def add_code_section(the_flatten_lines, path=None):
+        if path==None or path.endswith(('.cpp', '.c', '.cxx', '.h', 'hpp', '.hxx', '.py', '.asm', '.java', '.rs', '.kt', '.rb')):
+            the_flatten_lines = "```\n" + the_flatten_lines + "\n```"
+        return the_flatten_lines
+
+    @staticmethod
+    def files_reader(files, margin_lines=10, code_section_if_sourcecode=True):
         result = ""
 
         for path in files:
+            _path = path.split(":")
+            target_line = None
+            if len(_path)==2:
+                path = _path[0]
+                try:
+                    target_line = int(_path[1])
+                except:
+                    pass
             if os.path.exists( path ):
-              with open(path, 'r', encoding='UTF-8') as f:
-                result += f.read()
+                the_file_content = ""
+                with open(path, 'r', encoding='UTF-8') as f:
+                    the_file_content = f.read()
+                    if target_line:
+                        # in case of target_line with margin_lines
+                        lines = the_file_content.splitlines()
+                        start_pos = max(target_line-margin_lines, 0)
+                        end_pos = min(target_line+margin_lines, len(lines))
+                        the_file_content = "\n".join(lines[start_pos:end_pos])
+                    the_file_content = IGpt.add_code_section(the_file_content, path)
+                    result += the_file_content
 
         return result
 
