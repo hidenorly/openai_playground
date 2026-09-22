@@ -1,4 +1,4 @@
-#   Copyright 2024 hidenorly
+#   Copyright 2024, 2026 hidenorly
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -105,27 +105,41 @@ class OpenAIGptHelper(IGpt):
 
 
 class OpenAICompatibleGptHelper(IGpt):
-    def __init__(self, api_key, endpoint, model=None, is_streaming = False, headers={}):
+    def __init__(
+        self,
+        api_key,
+        endpoint,
+        model=None,
+        is_streaming=False,
+        headers=None,
+    ):
         self.api_key = api_key
         self.endpoint = endpoint
         self.model = model
         self.is_streaming = is_streaming
-        self.headers = headers
+
+        self.headers = dict(headers) if headers else {}
         self.headers['accept'] = 'application/json'
         self.headers['Content-Type'] = 'application/json'
+
         if self.api_key:
             self.headers['Authorization'] = f'Bearer {self.api_key}'
 
+        # Determine streaming format from endpoint.
+        self.is_ollama = "/api/chat" in self.endpoint
+        self.is_openai_compatible = "/v1/chat/completions" in self.endpoint
+
     def _create_payload(self, messages):
-        # payload
         payload = {
             "messages": messages,
         }
+
         if self.is_streaming:
             payload["stream"] = True
+
         if self.model:
             models = self.model.split(",")
-            if len(models)==1:
+            if len(models) == 1:
                 payload["model"] = self.model
             else:
                 payload["models"] = models
@@ -134,51 +148,152 @@ class OpenAICompatibleGptHelper(IGpt):
 
     def query(self, system_prompt, user_prompt):
         _messages = []
-        if system_prompt:
-            _messages.append( {"role": "system", "content": system_prompt} )
-        if user_prompt:
-            _messages.append( {"role": "user", "content": user_prompt} )
 
-        payload  = self._create_payload(_messages)
-        #print(payload)
+        if system_prompt:
+            _messages.append({
+                "role": "system",
+                "content": system_prompt
+            })
+
+        if user_prompt:
+            _messages.append({
+                "role": "user",
+                "content": user_prompt
+            })
+
+        payload = self._create_payload(_messages)
+        #print(str(payload))
 
         if self.is_streaming:
-            # streaming mode (ollama mode)
-            r = requests.post(self.endpoint, headers=self.headers, json=payload, stream=True)
-            r.raise_for_status()
-            output = ""
-            for line in r.iter_lines():
+            return self._query_streaming(payload)
+
+        return self._query_non_streaming(payload)
+
+    def _query_streaming(self, payload):
+        r = requests.post(
+            self.endpoint,
+            headers=self.headers,
+            json=payload,
+            stream=True,
+        )
+        r.raise_for_status()
+
+        output = ""
+
+        for line in r.iter_lines():
+            if not line:
+                continue
+
+            # iter_lines() returns bytes.
+            line = line.decode("utf-8")
+
+            # for ollama
+            if self.is_ollama:
+                # {"message":{"content":"hello"},"done":false}
+                # ...
+                # {"done":true,...}
                 body = json.loads(line)
+
                 if "error" in body:
                     raise Exception(body["error"])
+
                 if body.get("done") is False:
-                    message = body.get("message", "")
+                    message = body.get("message", {})
                     content = message.get("content", "")
-                    output += content
+
+                    if content:
+                        output += content
 
                 if body.get("done", False):
-                    message = body
-                    message["content"] = output
-                    return output, message
+                    body["content"] = output
+                    return output, body
 
-        else:
-            # non-streaming mode
-            response = requests.post(self.endpoint, headers=self.headers, json=payload)
-            if response.status_code == 200:
-                responses = response_json = response.json()
-                if isinstance(responses, dict):
-                    responses = [responses]
-                main_messages = []
-                for a_response in responses:
-                    main_messages.append( a_response['choices'][0]['message']['content'] )
-                if len(main_messages)==1:
-                    main_messages = main_messages[0]
-                return main_messages, response_json
+            # apple fm
+            elif self.is_openai_compatible:
+                # data: {"choices":[{"delta":{"content":"hello"}}]}
+                # ...
+                # data: {"choices":[{"delta":{},"finish_reason":"stop"}]}
+                # data: [DONE]
+
+                if not line.startswith("data:"):
+                    continue
+
+                data = line[5:].strip()
+
+                if data == "[DONE]":
+                    return output, {
+                        "content": output,
+                    }
+
+                body = json.loads(data)
+
+                if "error" in body:
+                    raise Exception(body["error"])
+
+                choices = body.get("choices", [])
+                if not choices:
+                    continue
+
+                delta = choices[0].get("delta", {})
+                content = delta.get("content", "")
+
+                if content:
+                    output += content
+
+                # Usually [DONE] follows this, but support
+                # finish_reason as well.
+                finish_reason = choices[0].get("finish_reason")
+
+                if finish_reason is not None:
+                    return output, {
+                        **body,
+                        "content": output,
+                    }
+
             else:
-                raise Exception(f"Error: {response.status_code} - {response.text}")
+                # Unknown streaming format.
+                raise Exception(
+                    f"Unsupported streaming endpoint: {self.endpoint}"
+                )
+
+        return output, {
+            "content": output,
+        }
+
+    def _query_non_streaming(self, payload):
+        response = requests.post(
+            self.endpoint,
+            headers=self.headers,
+            json=payload,
+        )
+
+        if response.status_code == 200:
+            #print(response)
+
+            response_json = response.json()
+
+            responses = response_json
+
+            if isinstance(responses, dict):
+                responses = [responses]
+
+            main_messages = []
+
+            for a_response in responses:
+                main_messages.append(
+                    a_response['choices'][0]['message']['content']
+                )
+
+            if len(main_messages) == 1:
+                main_messages = main_messages[0]
+
+            return main_messages, response_json
+
+        raise Exception(
+            f"Error: {response.status_code} - {response.text}"
+        )
 
         return None, None
-
 
 
 class ClaudeGptHelper(IGpt):
@@ -262,7 +377,7 @@ class GptClientFactory:
             apikey = os.getenv("LLM_API_KEY") if not args.apikey else args.apikey
             endpoint = os.getenv("LLM_ENDPOINT") if not args.endpoint else args.endpoint
             deployment = os.getenv("LLM_DEPLOYMENT_NAME") if not args.deployment else args.deployment
-            is_streaming = True if "/api/chat" in endpoint else False
+            is_streaming = True if ("/api/chat" in endpoint) or ("/v1/chat/completions" in endpoint) else False
             headers = {}
             if "header" in args:
                 for header in args.header:
